@@ -17,3 +17,7 @@ Clone this repository, then run `main.py`
 |:--|:--|
 |**SPACE**|Pauses timer|
 |**ESC**|Quits timer|
+
+## Customization
+
+You can do it all in the file `config.py`
