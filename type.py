@@ -1,5 +1,6 @@
 import cv2
 import time
+import winsound
 from PIL import Image, ImageFont, ImageDraw, ImageColor
 from config import *
 
@@ -142,3 +143,5 @@ class Timer:
                     return
 
                 curr += self.timers[idx].time
+
+                winsound.Beep(ALARM_FREQ, ALARM_DURATION)
