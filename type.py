@@ -1,8 +1,12 @@
 import cv2
 import time
 import winsound
+import datetime
 from PIL import Image, ImageFont, ImageDraw, ImageColor
 from config import *
+
+def hour_minute_second_millisecond():
+    return list(map(int, datetime.datetime.now().strftime("%H/%M/%S").split("/"))) + [time.time() % 1]
 
 timer_font = ImageFont.truetype(TIMER_FONT, TIMER_FONT_SIZE)
 ms_font = ImageFont.truetype(TIMER_FONT, MILLISECOND_FONT_SIZE)
@@ -85,18 +89,46 @@ class Time:
 
         self.name = name
         self.time = hour * 3600 + minute * 60 + second
+        self.nth = -1
+
+class Blocker:
+    def __init__(
+        self,
+        hour: int=0,
+        minute: int=0,
+        second: int=0
+    ):
+        assert isinstance(hour  , int)
+        assert isinstance(minute, int)
+        assert isinstance(second, int)
+
+        self.hour = hour
+        self.minute = minute
+        self.second = second
+
+        self.name = F"Blocker (~{hour :02.0f}:{minute :02.0f}:{second :02.0f})"
+        self.time = 0
+
+        self.until = hour * 3600 + minute * 60 + second * 1
+        self.wait = None
 
 class Timer:
     def __init__(
         self,
-        *timers: Time
+        *timers: Time | Blocker
     ):
         for i in timers:
-            assert isinstance(i, Time)
+            assert isinstance(i, (Time, Blocker))
 
         self.timers = timers
-        self.n = len(timers)
+        self.n = sum(int(isinstance(i, Time)) for i in timers)
         self.tot = sum(i.time for i in timers)
+
+        cnt = 0
+        for i in timers:
+            if isinstance(i, Time):
+                cnt += 1
+                i.nth = cnt
 
     def run(self):
         st = time.time()
@@ -109,9 +141,23 @@ class Timer:
             elapsed = time.time() - st
             st += elapsed
 
-            curr -= elapsed
+            if isinstance(self.timers[idx], Time):
+                curr -= elapsed
 
-            make_image(0, int(curr), int(curr * 1000) % 1000, self.timers[idx].name + F" ({idx + 1} / {self.n})", 1 - curr / self.timers[idx].time, (acc + (self.timers[0].time - curr)) / tot)
+                make_image(0, int(curr), int(curr * 1000) % 1000, self.timers[idx].name + F" ({self.timers[idx].nth} / {self.n})", 1 - curr / self.timers[idx].time, (acc + (self.timers[idx].time - curr)) / tot)
+
+            if isinstance(self.timers[idx], Blocker):
+                hmsm = hour_minute_second_millisecond()
+                t = hmsm[0] * 3600 + hmsm[1] * 60 + hmsm[2] + hmsm[3]
+                curr = self.timers[idx].until - t
+
+                if curr < -BLOCKER_NEW_DAY_THRESHOLD:
+                    curr += 86400
+
+                if self.timers[idx].wait is None:
+                    self.timers[idx].wait = curr
+
+                make_image(0, int(curr), int(curr * 1000) % 1000, self.timers[idx].name, 1 - curr / self.timers[idx].wait, acc / tot)
 
             cv2.imshow("timer", cv2.imread("frames/f0.png"))
 
@@ -138,10 +184,13 @@ class Timer:
                 acc += self.timers[idx].time
                 idx += 1
 
-                if idx == self.n:
+                if idx == len(self.timers):
                     cv2.destroyAllWindows()
                     return
 
+                if curr < -1:
+                    curr = 0
+                
                 curr += self.timers[idx].time
 
                 winsound.Beep(ALARM_FREQ, ALARM_DURATION)
